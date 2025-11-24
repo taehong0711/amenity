@@ -1,5 +1,5 @@
 streamlit
 pandas
 altair
-jinja2
-matplotlib
+gspread
+oauth2client
