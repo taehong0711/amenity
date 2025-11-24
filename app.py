@@ -233,7 +233,8 @@ def get_latest_stock_df():
     latest = snaps.groupby("item_id").tail(1)
     latest = latest.rename(columns={"total_units": "current_stock", "snap_date": "last_snap_date"})
     
-    merged = items.merge(latest[["item_id", "current_stock", "last_snap_date"]], left_on="id", right_on="item_id", how="left")
+    # [수정됨] suffixes를 추가하여 병합 충돌 해결
+    merged = items.merge(latest[["item_id", "current_stock", "last_snap_date"]], left_on="id", right_on="item_id", how="left", suffixes=("", "_snap"))
     merged["current_stock"] = merged["current_stock"].fillna(0)
     return merged
 
@@ -247,7 +248,10 @@ def get_snapshot_history():
     items = get_data("items")
     if snaps.empty or items.empty: return pd.DataFrame()
     
-    merged = snaps.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left")
+    # [수정됨] suffixes를 추가하여 병합 충돌 해결 (id_x, id_y 방지)
+    merged = snaps.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
+    
+    # merged에는 이제 'id' (스냅샷ID)와 'id_item' (품목ID)가 존재함
     return merged.sort_values("snap_date", ascending=False).head(50)
 
 def get_usage_from_snapshots(days=60):
@@ -296,7 +300,8 @@ def get_delivery_list():
     items = get_data("items")
     if dels.empty or items.empty: return pd.DataFrame()
     
-    merged = dels.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left")
+    # [수정됨] suffixes를 사용하여 병합 충돌 해결 (중요!)
+    merged = dels.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
     merged = merged.rename(columns={"name": "item"})
     return merged.sort_values(["arrival_date", "order_date"])
 
@@ -613,7 +618,7 @@ def main():
         sel_label = st.radio(t("menu_title"), [t(k) for k in menu])
         sel = menu[[t(k) for k in menu].index(sel_label)].replace("menu_", "")
         st.divider()
-        st.caption("v2.2 Google Sheets + CS Unit")
+        st.caption("v2.3 GSheets Key Fix")
 
     if sel == "home": page_home()
     elif sel == "items": page_items()
