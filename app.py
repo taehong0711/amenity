@@ -9,9 +9,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 # ==========================================
 # 설정 및 DB 연결 (Google Sheets)
 # ==========================================
-SHEET_NAME = "inventory_system"  # 구글 시트 파일 이름
+SHEET_NAME = "inventory_system"
 
-# 일본 공휴일 (유지)
+# 일본 공휴일
 JAPAN_HOLIDAYS = {
     "2025-01-01": "元日", "2025-01-13": "成人の日", "2025-02-11": "建国記念の日",
     "2025-02-23": "天皇誕生日", "2025-02-24": "振替休日", "2025-03-20": "春分の日",
@@ -23,7 +23,6 @@ JAPAN_HOLIDAYS = {
     "2026-01-01": "元日", "2026-01-12": "成人の日", "2026-02-11": "建国記念の日",
 }
 
-# 텍스트 리소스 (유지)
 TEXTS = {
     "jp": {
         "title": "ホテル在庫予測システム", "menu_title": "メニュー", "menu_home": "🏠 ホーム・サマリー",
@@ -48,9 +47,9 @@ TEXTS = {
         "cal_item": "品目", "cal_order_date": "発注日", "cal_arrival_date": "入荷予定日", "cal_cs": "CS", "cal_box": "箱/袋", "cal_note": "備考",
         "btn_save_cal": "登録", "success_save_cal": "登録しました。", "cal_list": "入荷予定一覧", "cal_search_item": "品目検索",
         "weekdays": ["月", "火", "水", "木", "金", "土", "日"], "prev_month": "◀ 前月", "next_month": "翌月 ▶", "today": "今日",
-        "lang": "Language"
+        "lang": "Language", "err_db": "DB接続エラー: ", "err_col": "列が見つかりません: "
     },
-    "en": {"lang": "Language", "menu_title": "Menu", "menu_home": "🏠 Home", "menu_items": "📦 Items", "menu_stock": "📝 Stock", "menu_forecast": "📊 Forecast", "menu_toothbrush": "🪥 Toothbrush", "menu_calendar": "📅 Calendar", "dashboard_alert": "Alerts", "dashboard_incoming": "Incoming", "dashboard_total_items": "Items", "btn_delete": "Delete", "success_delete": "Deleted.", "warn_no_data": "No Data.", "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], "prev_month": "Prev", "next_month": "Next", "today": "Today", "cal_search_item": "Search Item", "cal_list": "List", "cal_tab_new": "New", "cal_tab_list": "List/Del", "cal_header": "Calendar", "tb_header": "Toothbrush Sim", "forecast_header": "Forecast", "stock_header": "Stock Input", "items_header": "Item Master", "btn_save_stock": "Save", "btn_save_cal": "Save", "btn_register": "Register", "btn_update": "Update", "success_save_stock": "Saved", "success_save_cal": "Saved", "success_register": "Registered", "success_update": "Updated"},
+    "en": {"lang": "Language", "menu_title": "Menu", "menu_home": "🏠 Home", "menu_items": "📦 Items", "menu_stock": "📝 Stock", "menu_forecast": "📊 Forecast", "menu_toothbrush": "🪥 Toothbrush", "menu_calendar": "📅 Calendar", "dashboard_alert": "Alerts", "dashboard_incoming": "Incoming", "dashboard_total_items": "Items", "btn_delete": "Delete", "success_delete": "Deleted.", "warn_no_data": "No Data.", "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], "prev_month": "Prev", "next_month": "Next", "today": "Today", "cal_search_item": "Search Item", "cal_list": "List", "cal_tab_new": "New", "cal_tab_list": "List/Del", "cal_header": "Calendar", "tb_header": "Toothbrush Sim", "forecast_header": "Forecast", "stock_header": "Stock Input", "items_header": "Item Master", "btn_save_stock": "Save", "btn_save_cal": "Save", "btn_register": "Register", "btn_update": "Update", "success_save_stock": "Saved", "success_save_cal": "Saved", "success_register": "Registered", "success_update": "Updated", "err_db": "DB Error: ", "err_col": "Missing col: "},
     "ko": {
         "title": "호텔 재고 예측 시스템 (Google Sheets)", "lang": "Language / 言語 / 언어", "menu_title": "메뉴",
         "menu_home": "🏠 홈 & 요약", "menu_items": "📦 1. 품목 마스터", "menu_stock": "📝 2. 재고 입력",
@@ -75,23 +74,22 @@ TEXTS = {
         "cal_item": "품목", "cal_order_date": "발주일", "cal_arrival_date": "도착 예정일", "cal_cs": "CS", "cal_box": "박스", "cal_note": "비고",
         "btn_save_cal": "등록", "success_save_cal": "저장되었습니다.", "cal_list": "입고 예정 목록",
         "cal_search_item": "품목 검색", "weekdays": ["월", "화", "수", "목", "금", "토", "일"],
-        "prev_month": "◀ 이전 달", "next_month": "다음 달 ▶", "today": "오늘",
+        "prev_month": "◀ 이전 달", "next_month": "다음 달 ▶", "today": "오늘", "err_db": "DB 에러: ", "err_col": "필수 열 누락: "
     },
 }
 
 def get_lang_code():
-    return st.session_state.get("lang_code", "jp") # 기본값 일본어(jp)로 변경
+    return st.session_state.get("lang_code", "jp")
 
 def t(key: str) -> str:
     lang = get_lang_code()
-    return TEXTS.get(lang, TEXTS["jp"]).get(key, key) # Fallback도 일본어(jp)로 변경
+    return TEXTS.get(lang, TEXTS["jp"]).get(key, key)
 
 # ==========================================
 # Google Sheets 연결 함수
 # ==========================================
 @st.cache_resource
 def get_sheet_connection():
-    """Streamlit Secrets에서 키를 가져와 구글 시트에 연결"""
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
@@ -99,25 +97,28 @@ def get_sheet_connection():
     return sheet
 
 def get_data(worksheet_name):
-    """시트에서 데이터를 읽어 DataFrame으로 반환 (에러 방지 강화)"""
+    """시트 데이터를 안전하게 가져오고 컬럼명 정규화"""
     try:
         sh = get_sheet_connection()
         wks = sh.worksheet(worksheet_name)
         data = wks.get_all_records()
         
+        # 빈 데이터 처리 (헤더만 있어도 data는 비어있을 수 있음)
         if not data:
-            # 데이터가 없으면 올바른 컬럼을 가진 빈 DataFrame 반환 (KeyError 방지)
-            if worksheet_name == "items":
-                return pd.DataFrame(columns=["id", "name", "unit", "cs_total_units", "units_per_box", "boxes_per_cs", "safety_stock"])
-            elif worksheet_name == "snapshots":
-                return pd.DataFrame(columns=["id", "item_id", "snap_date", "qty_cs", "qty_box", "total_units", "note"])
-            elif worksheet_name == "deliveries":
-                return pd.DataFrame(columns=["id", "item_id", "order_date", "arrival_date", "qty_cs", "qty_box", "total_units", "note"])
-            return pd.DataFrame()
+            # 기본 컬럼 정의 (안전장치)
+            cols = []
+            if worksheet_name == "items": cols = ["id", "name", "unit", "cs_total_units", "units_per_box", "boxes_per_cs", "safety_stock"]
+            elif worksheet_name == "snapshots": cols = ["id", "item_id", "snap_date", "qty_cs", "qty_box", "total_units", "note"]
+            elif worksheet_name == "deliveries": cols = ["id", "item_id", "order_date", "arrival_date", "qty_cs", "qty_box", "total_units", "note"]
+            return pd.DataFrame(columns=cols)
             
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        # [중요] 컬럼명 공백 제거 및 소문자 변환 (KeyError 방지)
+        df.columns = [str(c).strip().lower() for c in df.columns]
+        return df
     except Exception as e:
-        st.error(f"DB Error ({worksheet_name}): {e}")
+        # 시트가 아예 없을 때 생성 시도 등은 생략하고 에러 로그
+        st.error(f"{t('err_db')}{worksheet_name} - {e}")
         return pd.DataFrame()
 
 def add_row(worksheet_name, row_dict):
@@ -126,17 +127,30 @@ def add_row(worksheet_name, row_dict):
     data = wks.get_all_records()
     if data:
         df = pd.DataFrame(data)
+        # 컬럼명 정규화 후 ID 찾기
+        df.columns = [str(c).strip().lower() for c in df.columns]
         new_id = int(df["id"].max()) + 1 if "id" in df.columns and not df.empty else 1
     else:
         new_id = 1
+    
     row_dict["id"] = new_id
+    
+    # 실제 시트의 헤더를 가져옴
     headers = wks.row_values(1)
-    # 헤더가 없을 경우 대비
     if not headers:
         headers = list(row_dict.keys())
         wks.append_row(headers)
-        
-    row_values = [row_dict.get(h, "") for h in headers]
+    
+    # row_dict의 키도 매칭을 위해 소문자 처리 필요할 수 있으나,
+    # 여기서는 사용자가 정확한 키를 넘긴다고 가정.
+    # 헤더와 매칭: 헤더를 소문자로 비교
+    header_map = {h.strip().lower(): h for h in headers}
+    
+    row_values = []
+    for h in headers:
+        key = h.strip().lower()
+        row_values.append(row_dict.get(key, row_dict.get(h, ""))) # 키(소문자) 또는 원래키로 시도
+    
     wks.append_row(row_values)
     st.cache_data.clear()
 
@@ -145,13 +159,19 @@ def update_row(worksheet_name, row_id, update_dict):
     wks = sh.worksheet(worksheet_name)
     data = wks.get_all_records()
     df = pd.DataFrame(data)
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    
     try:
+        # ID로 행 찾기
         row_idx = df[df["id"] == row_id].index[0] + 2
         headers = wks.row_values(1)
+        
         for col_name, value in update_dict.items():
-            if col_name in headers:
-                col_idx = headers.index(col_name) + 1
-                wks.update_cell(row_idx, col_idx, value)
+            # 헤더에서 해당 컬럼 위치 찾기 (대소문자 무시)
+            for i, h in enumerate(headers):
+                if h.strip().lower() == col_name.strip().lower():
+                    wks.update_cell(row_idx, i + 1, value)
+                    break
         st.cache_data.clear()
     except IndexError:
         st.error("ID not found.")
@@ -161,6 +181,8 @@ def delete_row(worksheet_name, row_id):
     wks = sh.worksheet(worksheet_name)
     data = wks.get_all_records()
     df = pd.DataFrame(data)
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    
     try:
         row_idx = df[df["id"] == row_id].index[0] + 2
         wks.delete_rows(row_idx)
@@ -189,8 +211,15 @@ def update_item_logic(iid, name, unit, cs, upb, bpc, safe):
 def delete_item_logic(iid):
     snaps = get_data("snapshots")
     dels = get_data("deliveries")
-    s_cnt = len(snaps[snaps["item_id"] == iid]) if not snaps.empty and "item_id" in snaps.columns else 0
-    d_cnt = len(dels[dels["item_id"] == iid]) if not dels.empty and "item_id" in dels.columns else 0
+    
+    s_cnt = 0
+    if not snaps.empty and "item_id" in snaps.columns:
+        s_cnt = len(snaps[snaps["item_id"] == iid])
+        
+    d_cnt = 0
+    if not dels.empty and "item_id" in dels.columns:
+        d_cnt = len(dels[dels["item_id"] == iid])
+    
     if s_cnt == 0 and d_cnt == 0:
         delete_row("items", iid)
         return True, 0, 0
@@ -220,76 +249,106 @@ def get_latest_stock_df():
     
     if items.empty: return pd.DataFrame()
     
-    # [수정] 빈 데이터 프레임이거나 컬럼이 없을 때 처리
-    if snaps.empty or "snap_date" not in snaps.columns:
+    # [안전장치] 필수 컬럼 확인
+    if snaps.empty or "snap_date" not in snaps.columns or "item_id" not in snaps.columns:
         items["current_stock"] = 0
         items["last_snap_date"] = None
         return items
     
-    snaps["snap_date"] = pd.to_datetime(snaps["snap_date"])
-    snaps = snaps.sort_values(["item_id", "snap_date"])
-    latest = snaps.groupby("item_id").tail(1)
-    latest = latest.rename(columns={"total_units": "current_stock", "snap_date": "last_snap_date"})
-    
-    merged = items.merge(latest[["item_id", "current_stock", "last_snap_date"]], left_on="id", right_on="item_id", how="left", suffixes=("", "_snap"))
-    merged["current_stock"] = merged["current_stock"].fillna(0)
-    return merged
+    try:
+        snaps["snap_date"] = pd.to_datetime(snaps["snap_date"])
+        snaps = snaps.sort_values(["item_id", "snap_date"])
+        latest = snaps.groupby("item_id").tail(1)
+        latest = latest.rename(columns={"total_units": "current_stock", "snap_date": "last_snap_date"})
+        
+        # Merge (suffixes로 충돌 방지)
+        merged = items.merge(latest[["item_id", "current_stock", "last_snap_date"]], left_on="id", right_on="item_id", how="left", suffixes=("", "_snap"))
+        merged["current_stock"] = merged["current_stock"].fillna(0)
+        return merged
+    except Exception as e:
+        st.error(f"Stock Calculation Error: {e}")
+        items["current_stock"] = 0
+        return items
 
 def get_recent_snapshots_per_item():
     df = get_latest_stock_df()
     if df.empty: return df
-    return df[["id", "name", "current_stock", "last_snap_date"]]
+    # 필요한 컬럼만 리턴 (없으면 에러 안나게 확인)
+    cols = ["id", "name", "current_stock", "last_snap_date"]
+    return df[[c for c in cols if c in df.columns]]
 
 def get_snapshot_history():
     snaps = get_data("snapshots")
     items = get_data("items")
+    
+    # [안전장치]
     if snaps.empty or items.empty: return pd.DataFrame()
-    merged = snaps.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
-    return merged.sort_values("snap_date", ascending=False).head(50)
+    if "item_id" not in snaps.columns or "id" not in items.columns: return pd.DataFrame()
+    
+    try:
+        merged = snaps.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
+        return merged.sort_values("snap_date", ascending=False).head(50)
+    except:
+        return pd.DataFrame()
 
 def get_usage_from_snapshots(days=60):
     snaps = get_data("snapshots")
-    if snaps.empty or "snap_date" not in snaps.columns: return pd.DataFrame(columns=["id", "daily_avg_usage"])
+    # [안전장치]
+    if snaps.empty or "snap_date" not in snaps.columns or "item_id" not in snaps.columns:
+        return pd.DataFrame(columns=["id", "daily_avg_usage"])
     
-    snaps["snap_date"] = pd.to_datetime(snaps["snap_date"])
-    cutoff = pd.to_datetime(date.today() - timedelta(days=days))
-    snaps = snaps[snaps["snap_date"] >= cutoff]
-    
-    records = []
-    for item_id, group in snaps.groupby("item_id"):
-        group = group.sort_values("snap_date").reset_index(drop=True)
-        if len(group) < 2: continue
-        daily_usages = []
-        for i in range(1, len(group)):
-            prev, curr = group.iloc[i-1], group.iloc[i]
-            days_diff = (curr["snap_date"] - prev["snap_date"]).days
-            if days_diff <= 0: continue
-            usage = prev["total_units"] - curr["total_units"]
-            if usage <= 0: continue
-            daily_usages.append(usage / days_diff)
-        if daily_usages:
-            avg = sum(daily_usages) / len(daily_usages)
-            records.append({"id": item_id, "daily_avg_usage": avg})
-    return pd.DataFrame(records)
+    try:
+        snaps["snap_date"] = pd.to_datetime(snaps["snap_date"])
+        cutoff = pd.to_datetime(date.today() - timedelta(days=days))
+        snaps = snaps[snaps["snap_date"] >= cutoff]
+        
+        records = []
+        for item_id, group in snaps.groupby("item_id"):
+            group = group.sort_values("snap_date").reset_index(drop=True)
+            if len(group) < 2: continue
+            
+            daily_usages = []
+            for i in range(1, len(group)):
+                prev, curr = group.iloc[i-1], group.iloc[i]
+                days_diff = (curr["snap_date"] - prev["snap_date"]).days
+                if days_diff <= 0: continue
+                usage = prev["total_units"] - curr["total_units"]
+                if usage <= 0: continue
+                daily_usages.append(usage / days_diff)
+                
+            if daily_usages:
+                avg = sum(daily_usages) / len(daily_usages)
+                records.append({"id": item_id, "daily_avg_usage": avg})
+        return pd.DataFrame(records)
+    except:
+        return pd.DataFrame(columns=["id", "daily_avg_usage"])
 
 def get_future_deliveries(horizon_days):
     dels = get_data("deliveries")
     if dels.empty or "arrival_date" not in dels.columns: return pd.DataFrame(columns=["item_id", "incoming_units"])
     
-    today = pd.to_datetime(date.today())
-    end_date = today + timedelta(days=horizon_days)
-    dels["arrival_date"] = pd.to_datetime(dels["arrival_date"])
-    mask = (dels["arrival_date"] > today) & (dels["arrival_date"] <= end_date)
-    future = dels[mask]
-    return future.groupby("item_id")["total_units"].sum().reset_index().rename(columns={"total_units": "incoming_units"})
+    try:
+        today = pd.to_datetime(date.today())
+        end_date = today + timedelta(days=horizon_days)
+        dels["arrival_date"] = pd.to_datetime(dels["arrival_date"])
+        mask = (dels["arrival_date"] > today) & (dels["arrival_date"] <= end_date)
+        future = dels[mask]
+        return future.groupby("item_id")["total_units"].sum().reset_index().rename(columns={"total_units": "incoming_units"})
+    except:
+        return pd.DataFrame(columns=["item_id", "incoming_units"])
 
 def get_delivery_list():
     dels = get_data("deliveries")
     items = get_data("items")
     if dels.empty or items.empty: return pd.DataFrame()
-    merged = dels.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
-    merged = merged.rename(columns={"name": "item"})
-    return merged.sort_values(["arrival_date", "order_date"])
+    if "item_id" not in dels.columns or "id" not in items.columns: return pd.DataFrame()
+    
+    try:
+        merged = dels.merge(items[["id", "name"]], left_on="item_id", right_on="id", how="left", suffixes=("", "_item"))
+        merged = merged.rename(columns={"name": "item"})
+        return merged.sort_values(["arrival_date", "order_date"])
+    except:
+        return pd.DataFrame()
 
 def get_jp_holiday_name(dt: date):
     iso = dt.isoformat()
@@ -302,18 +361,28 @@ def page_home():
     st.header(t("menu_home"))
     stock_df = get_latest_stock_df()
     if stock_df.empty:
-        st.info("No Data / データ 없음 (구글 시트를 확인하세요)")
+        st.info(t("warn_no_data"))
         return
 
     days, horizon = 60, 30
     usage_df = get_usage_from_snapshots(days)
-    merged = stock_df.merge(usage_df, on="id", how="left")
+    
+    # Merge safety
+    if not usage_df.empty:
+        merged = stock_df.merge(usage_df, on="id", how="left")
+    else:
+        merged = stock_df.copy()
+        merged["daily_avg_usage"] = 0
+        
     merged["daily_avg_usage"] = merged["daily_avg_usage"].fillna(0)
     merged["forecast_usage"] = merged["daily_avg_usage"] * horizon
     
     incoming_df = get_future_deliveries(horizon)
-    merged = merged.merge(incoming_df, left_on="id", right_on="item_id", how="left")
-    merged["incoming_units"] = merged["incoming_units"].fillna(0)
+    if not incoming_df.empty:
+        merged = merged.merge(incoming_df, left_on="id", right_on="item_id", how="left")
+        merged["incoming_units"] = merged["incoming_units"].fillna(0)
+    else:
+        merged["incoming_units"] = 0
     
     merged["order_qty"] = (
         merged["forecast_usage"] + merged["safety_stock"]
@@ -342,7 +411,7 @@ def page_items():
     tab1, tab2 = st.tabs([t("items_list"), t("items_new")])
     with tab1:
         df = get_items_df()
-        if not df.empty:
+        if not df.empty and "name" in df.columns:
             st.dataframe(df, use_container_width=True)
             st.divider()
             st.subheader(t("items_edit"))
@@ -393,29 +462,34 @@ def page_stock():
     st.header(t("stock_header"))
     t1, t2 = st.tabs([t("stock_tab_input"), t("stock_tab_history")])
     items = get_items_df()
+    
     with t1:
-        if not items.empty:
+        if not items.empty and "name" in items.columns:
             c1, c2 = st.columns([1, 1.5])
             with c1:
                 imap = {r["name"]: r["id"] for _, r in items.iterrows()}
                 sel = st.selectbox(t("stock_select_item"), list(imap.keys()))
-                iid = imap[sel]
-                row = items[items["id"] == iid].iloc[0]
-                st.caption(f"1CS={row['cs_total_units']}, 1Box={row['units_per_box']}")
-                with st.form("stock_in"):
-                    d = st.date_input(t("stock_date"), date.today())
-                    cc1, cc2 = st.columns(2)
-                    qc = cc1.number_input(t("stock_cs"), 0)
-                    qb = cc2.number_input(t("stock_box"), 0)
-                    nt = st.text_area(t("stock_note"), height=68)
-                    if st.form_submit_button(t("btn_save_stock")):
-                        tot = qc * row["cs_total_units"] + qb * row["units_per_box"]
-                        add_snapshot(iid, d.isoformat(), qc, qb, tot, nt)
-                        st.success(t("success_save_stock"))
-                        st.rerun()
+                if sel:
+                    iid = imap[sel]
+                    row = items[items["id"] == iid].iloc[0]
+                    st.caption(f"1CS={row['cs_total_units']}, 1Box={row['units_per_box']}")
+                    with st.form("stock_in"):
+                        d = st.date_input(t("stock_date"), date.today())
+                        cc1, cc2 = st.columns(2)
+                        qc = cc1.number_input(t("stock_cs"), 0)
+                        qb = cc2.number_input(t("stock_box"), 0)
+                        nt = st.text_area(t("stock_note"), height=68)
+                        if st.form_submit_button(t("btn_save_stock")):
+                            tot = qc * row["cs_total_units"] + qb * row["units_per_box"]
+                            add_snapshot(iid, d.isoformat(), qc, qb, tot, nt)
+                            st.success(t("success_save_stock"))
+                            st.rerun()
             with c2:
                 st.subheader(t("recent_stock"))
                 st.dataframe(get_recent_snapshots_per_item(), use_container_width=True)
+        else:
+            st.info("No items loaded.")
+            
     with t2:
         hist = get_snapshot_history()
         if not hist.empty:
@@ -438,8 +512,15 @@ def page_forecast_general():
         c1, c2 = st.columns(2)
         days = c1.slider(t("days_label"), 7, 120, 60)
         hor = c2.slider(t("horizon_label"), 7, 120, 30)
+    
     usage = get_usage_from_snapshots(days)
-    merged = stock.merge(usage, on="id", how="left").fillna(0)
+    
+    if not usage.empty:
+        merged = stock.merge(usage, on="id", how="left").fillna(0)
+    else:
+        merged = stock.copy()
+        merged["daily_avg_usage"] = 0
+        
     merged["forecast"] = merged["daily_avg_usage"] * hor
     incoming = get_future_deliveries(hor)
     if not incoming.empty:
@@ -459,6 +540,7 @@ def page_toothbrush():
         occ = st.slider("Occupancy", 0, 100, 90) / 100
         days = st.slider("Days", 1, 60, 30)
     def get_st(k):
+        if "name" not in stock.columns: return 0
         r = stock[stock["name"].str.contains(k)]
         return r.iloc[0]["current_stock"] if not r.empty else 0
     cur = {"N": get_st("ナチュラル"), "G": get_st("グリーン"), "A": get_st("アッシュ")}
@@ -476,25 +558,26 @@ def page_calendar():
     t1, t2 = st.tabs([t("cal_tab_new"), t("cal_tab_list")])
     items = get_items_df()
     with t1:
-        if not items.empty:
+        if not items.empty and "name" in items.columns:
             c1, c2 = st.columns([1, 2])
             with c1:
                 imap = {r["name"]: r["id"] for _, r in items.iterrows()}
                 sel = st.selectbox(t("cal_item"), list(imap.keys()))
-                iid = imap[sel]
-                row = items[items["id"] == iid].iloc[0]
-                with st.form("cal_in"):
-                    od = st.date_input(t("cal_order_date"))
-                    ad = st.date_input(t("cal_arrival_date"))
-                    cc1, cc2 = st.columns(2)
-                    qc = cc1.number_input(t("cal_cs"), 0)
-                    qb = cc2.number_input(t("cal_box"), 0)
-                    nt = st.text_input(t("cal_note"))
-                    if st.form_submit_button(t("btn_save_cal")):
-                        tot = qc * row["cs_total_units"] + qb * row["units_per_box"]
-                        add_delivery(iid, od.isoformat(), ad.isoformat(), qc, qb, tot, nt)
-                        st.success(t("success_save_cal"))
-                        st.rerun()
+                if sel:
+                    iid = imap[sel]
+                    row = items[items["id"] == iid].iloc[0]
+                    with st.form("cal_in"):
+                        od = st.date_input(t("cal_order_date"))
+                        ad = st.date_input(t("cal_arrival_date"))
+                        cc1, cc2 = st.columns(2)
+                        qc = cc1.number_input(t("cal_cs"), 0)
+                        qb = cc2.number_input(t("cal_box"), 0)
+                        nt = st.text_input(t("cal_note"))
+                        if st.form_submit_button(t("btn_save_cal")):
+                            tot = qc * row["cs_total_units"] + qb * row["units_per_box"]
+                            add_delivery(iid, od.isoformat(), ad.isoformat(), qc, qb, tot, nt)
+                            st.success(t("success_save_cal"))
+                            st.rerun()
     with t2:
         df = get_delivery_list()
         if not df.empty:
@@ -553,7 +636,7 @@ def page_calendar():
 # ==========================================
 def main():
     if "lang_code" not in st.session_state:
-        st.session_state["lang_code"] = "jp" # 기본값 일본어 변경
+        st.session_state["lang_code"] = "jp"
     
     st.set_page_config(page_title="Inventory", layout="wide")
     
@@ -566,7 +649,7 @@ def main():
         sel_label = st.radio(t("menu_title"), [t(k) for k in menu])
         sel = menu[[t(k) for k in menu].index(sel_label)].replace("menu_", "")
         st.divider()
-        st.caption("v2.4 Fixes (JP/KeyError)")
+        st.caption("v2.5 Fix KeyErrors")
 
     if sel == "home": page_home()
     elif sel == "items": page_items()
