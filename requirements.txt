@@ -1,5 +1,4 @@
 streamlit
 pandas
 altair
-gspread
-oauth2client
+firebase-admin
