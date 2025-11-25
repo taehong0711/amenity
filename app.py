@@ -3,13 +3,86 @@ import streamlit as st
 import altair as alt
 from datetime import date, timedelta, datetime
 import calendar
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # ==========================================
-# 설정 및 DB 연결 (Google Sheets)
+# 1. Firebase 연결 설정 (Google Sheets 대체)
 # ==========================================
-SHEET_NAME = "inventory_system"
+@st.cache_resource
+def get_db():
+    # secrets.toml에 있는 [firebase] 정보를 가져와서 연결
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(dict(st.secrets["firebase"]))
+        firebase_admin.initialize_app(cred)
+    return firestore.client()
+
+# ==========================================
+# 2. 공통 데이터 처리 함수 (Firestore용)
+# ==========================================
+def get_data(collection_name):
+    """Firestore에서 데이터를 가져와서 DataFrame으로 변환"""
+    db = get_db()
+    try:
+        docs = db.collection(collection_name).stream()
+        items = [doc.to_dict() for doc in docs]
+        
+        # 데이터가 없을 때 빈 DataFrame 생성 (에러 방지)
+        if not items:
+            cols = []
+            if collection_name == "items": cols = ["id", "name", "unit", "cs_total_units", "units_per_box", "boxes_per_cs", "safety_stock"]
+            elif collection_name == "snapshots": cols = ["id", "item_id", "snap_date", "qty_cs", "qty_box", "total_units", "note"]
+            elif collection_name == "deliveries": cols = ["id", "item_id", "order_date", "arrival_date", "qty_cs", "qty_box", "total_units", "note"]
+            return pd.DataFrame(columns=cols)
+            
+        df = pd.DataFrame(items)
+        # ID가 섞여있을 수 있으니 숫자형으로 변환
+        if "id" in df.columns:
+            df["id"] = pd.to_numeric(df["id"])
+        return df
+    except Exception as e:
+        st.error(f"데이터 불러오기 실패 ({collection_name}): {e}")
+        return pd.DataFrame()
+
+def add_row(collection_name, row_dict):
+    """데이터 추가 (Auto ID 생성)"""
+    db = get_db()
+    df = get_data(collection_name)
+    
+    # 마지막 ID 찾아서 +1 (기존 로직 유지)
+    if not df.empty and "id" in df.columns:
+        new_id = int(df["id"].max()) + 1
+    else:
+        new_id = 1
+    
+    row_dict["id"] = new_id
+    row_dict["created_at"] = datetime.now().isoformat() # 생성 시간 기록
+    
+    # Firestore에 저장 (문서 ID를 new_id로 지정하여 찾기 쉽게 함)
+    db.collection(collection_name).document(str(new_id)).set(row_dict)
+    st.cache_data.clear() # 캐시 초기화해서 바로 반영되게 함
+
+def update_row(collection_name, row_id, update_dict):
+    """데이터 수정"""
+    db = get_db()
+    try:
+        db.collection(collection_name).document(str(row_id)).update(update_dict)
+        st.cache_data.clear()
+    except Exception as e:
+        st.error(f"수정 실패: {e}")
+
+def delete_row(collection_name, row_id):
+    """데이터 삭제"""
+    db = get_db()
+    try:
+        db.collection(collection_name).document(str(row_id)).delete()
+        st.cache_data.clear()
+    except Exception as e:
+        st.error(f"삭제 실패: {e}")
+
+# ==========================================
+# 3. 비즈니스 로직 (기존 코드 유지)
+# ==========================================
 
 # 일본 공휴일
 JAPAN_HOLIDAYS = {
@@ -51,7 +124,7 @@ TEXTS = {
     },
     "en": {"lang": "Language", "menu_title": "Menu", "menu_home": "🏠 Home", "menu_items": "📦 Items", "menu_stock": "📝 Stock", "menu_forecast": "📊 Forecast", "menu_toothbrush": "🪥 Toothbrush", "menu_calendar": "📅 Calendar", "dashboard_alert": "Alerts", "dashboard_incoming": "Incoming", "dashboard_total_items": "Items", "btn_delete": "Delete", "success_delete": "Deleted.", "warn_no_data": "No Data.", "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], "prev_month": "Prev", "next_month": "Next", "today": "Today", "cal_search_item": "Search Item", "cal_list": "List", "cal_tab_new": "New", "cal_tab_list": "List/Del", "cal_header": "Calendar", "tb_header": "Toothbrush Sim", "forecast_header": "Forecast", "stock_header": "Stock Input", "items_header": "Item Master", "btn_save_stock": "Save", "btn_save_cal": "Save", "btn_register": "Register", "btn_update": "Update", "success_save_stock": "Saved", "success_save_cal": "Saved", "success_register": "Registered", "success_update": "Updated", "err_db": "DB Error: ", "err_col": "Missing col: "},
     "ko": {
-        "title": "호텔 재고 예측 시스템 (Google Sheets)", "lang": "Language / 言語 / 언어", "menu_title": "메뉴",
+        "title": "호텔 재고 예측 시스템 (Firebase)", "lang": "Language / 言語 / 언어", "menu_title": "메뉴",
         "menu_home": "🏠 홈 & 요약", "menu_items": "📦 1. 품목 마스터", "menu_stock": "📝 2. 재고 입력",
         "menu_forecast": "📊 3. 예측 & 발주", "menu_toothbrush": "🪥 4. 칫솔 시뮬레이션", "menu_calendar": "📅 5. 발주 캘린더",
         "dashboard_alert": "발주 필요 품목", "dashboard_incoming": "입고 예정 건수", "dashboard_total_items": "등록 품목 수",
@@ -85,114 +158,7 @@ def t(key: str) -> str:
     lang = get_lang_code()
     return TEXTS.get(lang, TEXTS["jp"]).get(key, key)
 
-# ==========================================
-# Google Sheets 연결 함수
-# ==========================================
-@st.cache_resource
-def get_sheet_connection():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME)
-    return sheet
-
-def get_data(worksheet_name):
-    """시트 데이터를 안전하게 가져오고 컬럼명 정규화"""
-    try:
-        sh = get_sheet_connection()
-        wks = sh.worksheet(worksheet_name)
-        data = wks.get_all_records()
-        
-        # 빈 데이터 처리 (헤더만 있어도 data는 비어있을 수 있음)
-        if not data:
-            # 기본 컬럼 정의 (안전장치)
-            cols = []
-            if worksheet_name == "items": cols = ["id", "name", "unit", "cs_total_units", "units_per_box", "boxes_per_cs", "safety_stock"]
-            elif worksheet_name == "snapshots": cols = ["id", "item_id", "snap_date", "qty_cs", "qty_box", "total_units", "note"]
-            elif worksheet_name == "deliveries": cols = ["id", "item_id", "order_date", "arrival_date", "qty_cs", "qty_box", "total_units", "note"]
-            return pd.DataFrame(columns=cols)
-            
-        df = pd.DataFrame(data)
-        # [중요] 컬럼명 공백 제거 및 소문자 변환 (KeyError 방지)
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        return df
-    except Exception as e:
-        # 시트가 아예 없을 때 생성 시도 등은 생략하고 에러 로그
-        st.error(f"{t('err_db')}{worksheet_name} - {e}")
-        return pd.DataFrame()
-
-def add_row(worksheet_name, row_dict):
-    sh = get_sheet_connection()
-    wks = sh.worksheet(worksheet_name)
-    data = wks.get_all_records()
-    if data:
-        df = pd.DataFrame(data)
-        # 컬럼명 정규화 후 ID 찾기
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        new_id = int(df["id"].max()) + 1 if "id" in df.columns and not df.empty else 1
-    else:
-        new_id = 1
-    
-    row_dict["id"] = new_id
-    
-    # 실제 시트의 헤더를 가져옴
-    headers = wks.row_values(1)
-    if not headers:
-        headers = list(row_dict.keys())
-        wks.append_row(headers)
-    
-    # row_dict의 키도 매칭을 위해 소문자 처리 필요할 수 있으나,
-    # 여기서는 사용자가 정확한 키를 넘긴다고 가정.
-    # 헤더와 매칭: 헤더를 소문자로 비교
-    header_map = {h.strip().lower(): h for h in headers}
-    
-    row_values = []
-    for h in headers:
-        key = h.strip().lower()
-        row_values.append(row_dict.get(key, row_dict.get(h, ""))) # 키(소문자) 또는 원래키로 시도
-    
-    wks.append_row(row_values)
-    st.cache_data.clear()
-
-def update_row(worksheet_name, row_id, update_dict):
-    sh = get_sheet_connection()
-    wks = sh.worksheet(worksheet_name)
-    data = wks.get_all_records()
-    df = pd.DataFrame(data)
-    df.columns = [str(c).strip().lower() for c in df.columns]
-    
-    try:
-        # ID로 행 찾기
-        row_idx = df[df["id"] == row_id].index[0] + 2
-        headers = wks.row_values(1)
-        
-        for col_name, value in update_dict.items():
-            # 헤더에서 해당 컬럼 위치 찾기 (대소문자 무시)
-            for i, h in enumerate(headers):
-                if h.strip().lower() == col_name.strip().lower():
-                    wks.update_cell(row_idx, i + 1, value)
-                    break
-        st.cache_data.clear()
-    except IndexError:
-        st.error("ID not found.")
-
-def delete_row(worksheet_name, row_id):
-    sh = get_sheet_connection()
-    wks = sh.worksheet(worksheet_name)
-    data = wks.get_all_records()
-    df = pd.DataFrame(data)
-    df.columns = [str(c).strip().lower() for c in df.columns]
-    
-    try:
-        row_idx = df[df["id"] == row_id].index[0] + 2
-        wks.delete_rows(row_idx)
-        st.cache_data.clear()
-    except IndexError:
-        st.error("ID not found.")
-
-# ==========================================
 # 데이터 처리 로직
-# ==========================================
 def get_items_df():
     return get_data("items")
 
@@ -273,7 +239,6 @@ def get_latest_stock_df():
 def get_recent_snapshots_per_item():
     df = get_latest_stock_df()
     if df.empty: return df
-    # 필요한 컬럼만 리턴 (없으면 에러 안나게 확인)
     cols = ["id", "name", "current_stock", "last_snap_date"]
     return df[[c for c in cols if c in df.columns]]
 
@@ -281,7 +246,6 @@ def get_snapshot_history():
     snaps = get_data("snapshots")
     items = get_data("items")
     
-    # [안전장치]
     if snaps.empty or items.empty: return pd.DataFrame()
     if "item_id" not in snaps.columns or "id" not in items.columns: return pd.DataFrame()
     
@@ -293,7 +257,6 @@ def get_snapshot_history():
 
 def get_usage_from_snapshots(days=60):
     snaps = get_data("snapshots")
-    # [안전장치]
     if snaps.empty or "snap_date" not in snaps.columns or "item_id" not in snaps.columns:
         return pd.DataFrame(columns=["id", "daily_avg_usage"])
     
@@ -355,7 +318,7 @@ def get_jp_holiday_name(dt: date):
     return JAPAN_HOLIDAYS.get(iso, None)
 
 # ==========================================
-# 페이지 함수들
+# 4. 페이지 구성 (기존과 동일)
 # ==========================================
 def page_home():
     st.header(t("menu_home"))
@@ -367,7 +330,6 @@ def page_home():
     days, horizon = 60, 30
     usage_df = get_usage_from_snapshots(days)
     
-    # Merge safety
     if not usage_df.empty:
         merged = stock_df.merge(usage_df, on="id", how="left")
     else:
@@ -632,7 +594,7 @@ def page_calendar():
                     st.rerun()
 
 # ==========================================
-# 메인 실행
+# 5. 메인 실행
 # ==========================================
 def main():
     if "lang_code" not in st.session_state:
@@ -649,7 +611,7 @@ def main():
         sel_label = st.radio(t("menu_title"), [t(k) for k in menu])
         sel = menu[[t(k) for k in menu].index(sel_label)].replace("menu_", "")
         st.divider()
-        st.caption("v2.5 Fix KeyErrors")
+        st.caption("v3.0 Firebase Edition")
 
     if sel == "home": page_home()
     elif sel == "items": page_items()
