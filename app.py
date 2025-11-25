@@ -302,7 +302,7 @@ def page_home():
     st.header(t("menu_home"))
     stock_df = get_latest_stock_df()
     if stock_df.empty:
-        st.info("No Data / 데이터 없음 (구글 시트를 확인하세요)")
+        st.info("No Data / データ 없음 (구글 시트를 확인하세요)")
         return
 
     days, horizon = 60, 30
